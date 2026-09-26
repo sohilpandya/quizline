@@ -57,6 +57,7 @@ export type Bundle = {
   source: "agent" | "fallback";
   pending?: boolean;
   ticket: boolean;
+  order?: { ticket: boolean; items: string[]; free_item: string | null; total_gbp: number; at: string };
 };
 
 export type Player = {
@@ -83,6 +84,7 @@ export function startPosition(playerId: string) {
 
 /** Only about half the room can get tickets: first to the front wins, the rest hit "sold out". */
 export const TICKET_SHARE = 0.5;
+export const TICKET_PRICE_GBP = 85;
 export function ticketCapacity(players: number) {
   return Math.max(1, Math.ceil(players * TICKET_SHARE));
 }

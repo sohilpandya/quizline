@@ -2,7 +2,7 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo, OPTION_STYLES, TimerBar } from "@/components/ui";
-import { QUESTION_MS, QUEUE_SIZE, startPosition, type Bundle, type PublicQuestion, type Quiz } from "@/lib/game";
+import { QUESTION_MS, QUEUE_SIZE, TICKET_PRICE_GBP, startPosition, type Bundle, type PublicQuestion, type Quiz } from "@/lib/game";
 import { useCountdown, usePlayers, useQuizState } from "@/lib/hooks";
 
 const AUTO_NEXT_MS = 900;
@@ -228,7 +228,7 @@ function Game({
               <p className="text-rose-50">So close! Tickets ran out just before you reached the front.</p>
             </div>
           )}
-          {b ? <BasketCard b={b} /> : <AgentWorking />}
+          {decided !== null && <Checkout code={code} playerId={playerId} ticket={decided} b={b} artist={quiz.artist} />}
         </div>
       </Shell>
     );
@@ -422,75 +422,179 @@ function QueueBar({ queue, ticketsLeft }: { queue: Queue; ticketsLeft: number })
 
 function AgentWorking() {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-3xl border border-white/10 bg-white/5 p-8 text-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-fuchsia-400 border-t-transparent" />
-      <p className="font-bold">Your Basket agent is shopping for you…</p>
-      <p className="text-sm text-violet-200">Reading how you played, your reward and the £50 budget.</p>
+    <div className="flex items-center gap-3 rounded-2xl bg-black/20 p-4">
+      <div className="h-6 w-6 shrink-0 animate-spin rounded-full border-4 border-fuchsia-400 border-t-transparent" />
+      <p className="text-sm text-violet-100">Your Basket agent is picking merch suggestions from how you played…</p>
     </div>
   );
 }
 
-function BasketCard({ b }: { b: Bundle }) {
-  const [claimed, setClaimed] = useState(false);
+const gbp = (n: number) => `£${n.toFixed(2)}`;
+
+/** Tickets are the main purchase; the agent's merch picks are optional add-ons, each one opt-in. */
+function Checkout({ code, playerId, ticket, b, artist }: { code: string; playerId: string; ticket: boolean; b: Bundle | null; artist: string }) {
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [gift, setGift] = useState(true);
+  const [placing, setPlacing] = useState(false);
+  const order = b?.order;
+  const selected = picked ?? new Set(b?.items.map((i) => i.id) ?? []);
+
+  const merch = b ? b.items.filter((i) => selected.has(i.id)).reduce((s, i) => s + Number(i.price_gbp), 0) * (1 - b.discount_pct / 100) : 0;
+  const total = (ticket ? TICKET_PRICE_GBP : 0) + merch;
+  const hasGift = !!b?.free_item;
+  const nothing = !ticket && selected.size === 0 && !(hasGift && gift);
+
+  const preset = (items: "none" | "all", withGift: boolean) => {
+    setPicked(new Set(items === "all" ? (b?.items.map((i) => i.id) ?? []) : []));
+    setGift(withGift);
+  };
+  const toggle = (id: string) => {
+    const n = new Set(selected);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    setPicked(n);
+  };
+
+  async function place() {
+    setPlacing(true);
+    await fetch(`/api/quizzes/${code}/checkout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, itemIds: [...selected], freeItem: hasGift && gift }),
+    });
+  }
+
+  if (order) {
+    return (
+      <div className="animate-pop flex flex-col items-center gap-2 rounded-3xl bg-emerald-500/15 p-6 text-center">
+        <div className="text-4xl">✅</div>
+        <p className="text-xl font-black">Order placed · {gbp(order.total_gbp)}</p>
+        <p className="text-sm text-emerald-100">
+          {[order.ticket && "Tickets", order.free_item && "free gift", order.items.length && `${order.items.length} merch item${order.items.length > 1 ? "s" : ""}`]
+            .filter(Boolean)
+            .join(" + ") || "Nothing this time"}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="animate-pop flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-5">
-      <div className="flex items-center justify-between">
-        <span className="font-bold">Your agent&apos;s basket</span>
-        <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-300">{b.tier}</span>
-      </div>
-      <p className="text-sm text-violet-100/90">{b.explanation}</p>
-      <ul className="flex flex-col gap-3">
-        {b.free_item && (
-          <li className="flex items-center gap-3 rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-3">
-            <span className="text-3xl">{b.free_item.emoji}</span>
-            <span className="flex-1">
-              <span className="block font-semibold leading-tight">{b.free_item.title}</span>
-              <span className="text-xs text-emerald-300">
-                Earned with {b.correct}/{b.asked} correct
-              </span>
-            </span>
-            <span className="font-mono text-emerald-300">FREE</span>
-          </li>
-        )}
-        {b.items.map((it) => (
-          <li key={it.id} className="flex items-center gap-3 rounded-2xl bg-black/20 p-3">
-            <span className="text-3xl">{it.emoji}</span>
-            <span className="flex-1">
-              <span className="block font-semibold leading-tight">{it.title}</span>
-              <span className="text-xs text-violet-300">{it.tags.join(" · ")}</span>
-            </span>
-            <span className="font-mono">£{Number(it.price_gbp).toFixed(2)}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-end justify-between border-t border-white/10 pt-3">
-        <span className="text-sm text-violet-300">
-          <s>£{b.subtotal_gbp.toFixed(2)}</s> · {b.discount_pct}% off
-        </span>
-        <span className="text-3xl font-black">£{b.total_gbp.toFixed(2)}</span>
-      </div>
+    <div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-5">
+      {ticket && (
+        <div className="flex items-center gap-3 rounded-2xl bg-white p-3 text-violet-950">
+          <span className="text-3xl">🎟️</span>
+          <span className="flex-1">
+            <span className="block font-bold leading-tight">{artist} · 1 × Standard ticket</span>
+            <span className="text-xs text-violet-700">Reserved for you</span>
+          </span>
+          <span className="font-mono font-bold">{gbp(TICKET_PRICE_GBP)}</span>
+        </div>
+      )}
+
+      {!b ? (
+        <AgentWorking />
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="font-bold">{ticket ? "Optional add-ons from your agent" : "Your agent's consolation picks"}</span>
+            <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-300">{b.tier}</span>
+          </div>
+          <p className="text-sm text-violet-100/90">{b.explanation}</p>
+
+          <div className="grid grid-cols-3 gap-2 text-sm font-semibold">
+            <button onClick={() => preset("none", false)} className="rounded-xl bg-white/10 py-2">
+              {ticket ? "Just tickets" : "No thanks"}
+            </button>
+            <button onClick={() => preset("none", true)} disabled={!hasGift} className="rounded-xl bg-white/10 py-2 disabled:opacity-30">
+              {ticket ? "+ free gift" : "Free gift only"}
+            </button>
+            <button onClick={() => preset("all", true)} className="rounded-xl bg-white/10 py-2">
+              Everything
+            </button>
+          </div>
+
+          <ul className="flex flex-col gap-2">
+            {b.free_item && (
+              <Row
+                on={gift}
+                onClick={() => setGift(!gift)}
+                emoji={b.free_item.emoji}
+                title={b.free_item.title}
+                sub={`Earned with ${b.correct}/${b.asked} correct`}
+                price="FREE"
+                accent
+              />
+            )}
+            {b.items.map((it) => (
+              <Row
+                key={it.id}
+                on={selected.has(it.id)}
+                onClick={() => toggle(it.id)}
+                emoji={it.emoji}
+                title={it.title}
+                sub={it.tags.join(" · ")}
+                price={gbp(Number(it.price_gbp) * (1 - b.discount_pct / 100))}
+              />
+            ))}
+          </ul>
+          {b.discount_pct > 0 && <p className="-mt-2 text-xs text-violet-300">Prices include your {b.discount_pct}% quiz reward.</p>}
+        </>
+      )}
+
       <button
-        onClick={() => setClaimed(true)}
-        disabled={claimed}
-        className="rounded-2xl bg-emerald-500 py-4 text-lg font-bold disabled:opacity-80"
+        onClick={place}
+        disabled={placing || nothing}
+        className="rounded-2xl bg-emerald-500 py-4 text-lg font-bold disabled:opacity-50"
       >
-        {claimed ? (b.ticket ? "✓ Added to your ticket order" : "✓ Order placed") : b.ticket ? "Add basket to my ticket order" : "Buy my consolation basket"}
+        {placing
+          ? "Placing order…"
+          : ticket
+            ? `Buy tickets${merch > 0 ? " + add-ons" : ""} · ${gbp(total)}`
+            : merch > 0
+              ? `Buy merch · ${gbp(total)}`
+              : "Claim free gift"}
       </button>
-      <details className="rounded-2xl bg-black/20 p-3 text-sm" open>
-        <summary className="cursor-pointer font-semibold text-violet-200">How your agent built this</summary>
-        <ol className="mt-2 flex flex-col gap-1.5">
-          {b.trace.map((t, i) => (
-            <li
-              key={i}
-              className={t.kind === "guardrail" ? "text-amber-300" : t.kind === "think" ? "text-violet-100/90" : "text-emerald-300"}
-            >
-              {t.kind === "guardrail" ? "🛡️ " : t.kind === "think" ? "💭 " : "✓ "}
-              {t.text}
-            </li>
-          ))}
-        </ol>
-      </details>
+
+      {b && (
+        <details className="rounded-2xl bg-black/20 p-3 text-sm">
+          <summary className="cursor-pointer font-semibold text-violet-200">How your agent picked these</summary>
+          <ol className="mt-2 flex flex-col gap-1.5">
+            {b.trace.map((t, i) => (
+              <li
+                key={i}
+                className={t.kind === "guardrail" ? "text-amber-300" : t.kind === "think" ? "text-violet-100/90" : "text-emerald-300"}
+              >
+                {t.kind === "guardrail" ? "🛡️ " : t.kind === "think" ? "💭 " : "✓ "}
+                {t.text}
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
     </div>
+  );
+}
+
+function Row(props: { on: boolean; onClick: () => void; emoji: string; title: string; sub: string; price: string; accent?: boolean }) {
+  return (
+    <li>
+      <button
+        onClick={props.onClick}
+        className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left transition ${
+          props.on ? (props.accent ? "border border-emerald-400/50 bg-emerald-500/15" : "border border-white/20 bg-black/30") : "border border-transparent bg-black/10 opacity-50"
+        }`}
+      >
+        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 ${props.on ? "border-emerald-400 bg-emerald-400 text-violet-950" : "border-white/30"}`}>
+          {props.on ? "✓" : ""}
+        </span>
+        <span className="text-2xl">{props.emoji}</span>
+        <span className="flex-1">
+          <span className="block text-sm font-semibold leading-tight">{props.title}</span>
+          <span className="text-xs text-violet-300">{props.sub}</span>
+        </span>
+        <span className={`font-mono text-sm ${props.accent ? "text-emerald-300" : ""}`}>{props.price}</span>
+      </button>
+    </li>
   );
 }
 
