@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { grokJson } from "@/lib/grok";
+import { grokJson, grokResearch } from "@/lib/grok";
 import { FALLBACK_QUESTIONS, FALLBACK_TAGS, fallbackCatalog } from "./fallback";
 
 const TagsSchema = z.object({ tags: z.array(z.string().min(2).max(40)).min(4).max(10) });
@@ -28,6 +28,7 @@ export type GeneratedQuiz = {
   questions: z.infer<typeof QuestionSchema>[];
   items: z.infer<typeof ItemSchema>[];
   source: "grok" | "fallback";
+  researched: boolean;
 };
 
 const SYSTEM =
@@ -47,10 +48,20 @@ function keepKnownTags(tags: string[], vocab: string[]) {
 }
 
 export async function generateQuiz(artist: string, count: number): Promise<GeneratedQuiz> {
+  const today = new Date().toISOString().slice(0, 10);
+  // Step 1: research what's current (latest lineup / release / tour) on the live web, so the quiz isn't all history.
+  const research = await grokResearch(
+    `Today is ${today}. Search the web about "${artist}" (an artist, band, festival or event). Summarise in under 250 words the most CURRENT facts a fan quiz could use: ` +
+      `for a festival, the most recent edition's year, headliners by day and stage, the Legends slot, surprise/secret sets, and 20+ notable acts with the stage they played, plus any announced next edition; ` +
+      `for an artist, the latest album, singles, current/recent tour and recent news. Plain facts only.`,
+  );
+  const context = research ? `\n\nFresh web research (${today}):\n${research}` : "";
+
   const tagResult = await grokJson(
     TagsSchema,
     SYSTEM,
-    `Artist: ${artist}\nList 6-8 short fan-facing "affinity tags" that segment this artist's fandom, mostly albums/eras (e.g. "Purpose era"), plus themes like "Live shows", "Early days", "Collabs". JSON: {"tags": string[]}`,
+    `Subject: ${artist}${context}\nList 6-8 short fan-facing "affinity tags" that segment this fandom. ` +
+      `Include one tag for the latest/current thing (e.g. "2025 lineup", "Latest album"), and otherwise eras, albums, headliners or themes like "Live shows", "Early days", "Legends". JSON: {"tags": string[]}`,
   );
 
   if (!tagResult) return fallback(artist, count);
@@ -60,7 +71,11 @@ export async function generateQuiz(artist: string, count: number): Promise<Gener
     grokJson(
       QuizSchema,
       SYSTEM,
-      `Artist: ${artist}\nWrite ${count} multiple-choice trivia questions, ordered from easy to hard (difficulty 1-3).\n` +
+      `Subject: ${artist}${context}\nWrite ${count} multiple-choice trivia questions, ordered from easy to hard (difficulty 1-3).\n` +
+        (research
+          ? `About half the questions must come from the fresh web research above (e.g. who headlined which day, which stage an act played, "which of these acts was on the lineup"), using ONLY facts stated in the research. The rest from well-known history. Interleave current and historical questions.\n`
+          : "") +
+        `Every question must test a different fact (no repeats or rephrasings). Never ask about things that have not happened yet or that you cannot verify (future prices, rumours).\n` +
         `Each has exactly 4 options and one correct answer_index (0-3). Tag each question with 1-2 tags chosen ONLY from: ${JSON.stringify(vocab)}.\n` +
         `Cover a spread of the tags. JSON: {"questions":[{"prompt","options","answer_index","difficulty","tags"}]}`,
     ),
@@ -68,7 +83,7 @@ export async function generateQuiz(artist: string, count: number): Promise<Gener
       CatalogSchema,
       SYSTEM +
         " You also act as the merchandiser, designing a mock merch catalog. Items are fictional mock products for a demo.",
-      `Artist: ${artist}\nDesign 40 mock merch items for the tour store: tees, hoodies, caps, posters, vinyl, tote bags, pins, lanyards, phone cases, bucket hats, etc.\n` +
+      `Subject: ${artist}${context}\nDesign 40 mock merch items for the tour store: tees, hoodies, caps, posters, vinyl, tote bags, pins, lanyards, phone cases, bucket hats, etc.\n` +
         `Each item title references this artist's OWN songs, albums, tours or lyrics (never other artists' songs), and a specific era/album/theme and has 1-2 tags chosen ONLY from: ${JSON.stringify(vocab)}. Cover every tag with several items.\n` +
         `Realistic GBP prices (£8-£90). One emoji per item. JSON: {"items":[{"title","category","description","price_gbp","emoji","tags"}]}`,
     ),
@@ -81,6 +96,7 @@ export async function generateQuiz(artist: string, count: number): Promise<Gener
     questions: quiz.questions.slice(0, count).map((q) => shuffleOptions({ ...q, tags: keepKnownTags(q.tags, vocab) })),
     items: (catalog?.items ?? fallbackCatalog(artist, vocab)).slice(0, 50).map((i) => ({ ...i, tags: keepKnownTags(i.tags, vocab) })),
     source: "grok",
+    researched: !!research,
   };
 }
 
@@ -90,5 +106,6 @@ function fallback(artist: string, count: number): GeneratedQuiz {
     questions: FALLBACK_QUESTIONS.slice(0, count).map(shuffleOptions),
     items: fallbackCatalog("Nova Rae", FALLBACK_TAGS),
     source: "fallback",
+    researched: false,
   };
 }

@@ -1,12 +1,14 @@
 import { bad, getQuiz } from "@/lib/api";
+import { tick } from "@/lib/engine";
 import { serverSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/quizzes/[code]">) {
   const { code } = await ctx.params;
-  const quiz = await getQuiz(code);
+  let quiz = await getQuiz(code);
   if (!quiz) return bad("Quiz not found", 404);
+  if (await tick(quiz)) quiz = (await getQuiz(code))!;
 
   const db = serverSupabase();
   let question = null;

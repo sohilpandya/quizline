@@ -1,8 +1,8 @@
 "use client";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Logo, OPTION_STYLES, TimerBar } from "@/components/ui";
-import { QUESTION_MS } from "@/lib/game";
+import { QUESTION_MS, QUEUE_SIZE, REVEAL_MS, queuePosition, startPosition, type Quiz } from "@/lib/game";
 import { useCountdown, usePlayers, useQuizState } from "@/lib/hooks";
 
 function storageGet(key: string) {
@@ -25,7 +25,6 @@ export default function Play() {
   const [name, setName] = useState("");
   const [joining, setJoining] = useState(false);
   const [claimed, setClaimed] = useState(false);
-  const [budget, setBudget] = useState(60);
   const [choices, setChoices] = useState<Record<number, number>>({});
   const { state, error, skew } = useQuizState(code);
   const quiz = state?.quiz;
@@ -40,7 +39,7 @@ export default function Play() {
     const res = await fetch(`/api/quizzes/${code}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, budget }),
+      body: JSON.stringify({ name }),
     });
     const data = await res.json();
     setJoining(false);
@@ -82,23 +81,6 @@ export default function Play() {
             maxLength={20}
             className="rounded-2xl border border-white/10 bg-black/30 px-5 py-4 text-center text-2xl outline-none focus:border-fuchsia-400"
           />
-          <div className="flex flex-col gap-2">
-            <span className="text-center text-sm text-violet-200">
-              Your agent will build you a merch basket. Max spend?
-            </span>
-            <div className="grid grid-cols-3 gap-2">
-              {[30, 60, 100].map((b) => (
-                <button
-                  type="button"
-                  key={b}
-                  onClick={() => setBudget(b)}
-                  className={`rounded-xl py-3 text-lg font-bold ${budget === b ? "bg-white text-violet-950" : "bg-white/10"}`}
-                >
-                  £{b}
-                </button>
-              ))}
-            </div>
-          </div>
           <button
             disabled={joining || !name.trim()}
             className="rounded-2xl bg-fuchsia-500 py-4 text-xl font-bold disabled:opacity-60"
@@ -111,11 +93,12 @@ export default function Play() {
   }
 
   const header = (
-    <div className="flex w-full items-center justify-between text-sm text-violet-200">
-      <span className="font-semibold">{me?.name}</span>
-      <span>
-        {me ? `#${meIndex + 1} · ${me.score} pts` : ""}
-      </span>
+    <div className="flex w-full flex-col gap-3">
+      <QueueBar playerId={playerId} quiz={quiz} />
+      <div className="flex w-full items-center justify-between text-sm text-violet-200">
+        <span className="font-semibold">{me?.name}</span>
+        <span>{me ? `Quiz rank #${meIndex + 1} · ${me.score} pts` : ""}</span>
+      </div>
     </div>
   );
 
@@ -176,7 +159,7 @@ export default function Play() {
               </ul>
               <div className="flex items-end justify-between border-t border-white/10 pt-3">
                 <span className="text-sm text-violet-300">
-                  <s>£{b.subtotal_gbp.toFixed(2)}</s> · {b.discount_pct}% off · budget £{b.budget_gbp}
+                  <s>£{b.subtotal_gbp.toFixed(2)}</s> · {b.discount_pct}% off
                 </span>
                 <span className="text-3xl font-black">£{b.total_gbp.toFixed(2)}</span>
               </div>
@@ -260,6 +243,50 @@ export default function Play() {
         </div>
       )}
     </Shell>
+  );
+}
+
+function QueueBar({ playerId, quiz }: { playerId: string; quiz: Quiz }) {
+  const pos = queuePosition(playerId, quiz);
+  const start = startPosition(playerId);
+  const prev = useRef(pos);
+  const [moved, setMoved] = useState(0);
+
+  useEffect(() => {
+    if (pos < prev.current) {
+      setMoved(prev.current - pos);
+      const t = setTimeout(() => setMoved(0), 2500);
+      prev.current = pos;
+      return () => clearTimeout(t);
+    }
+    prev.current = pos;
+  }, [pos]);
+
+  const remainingQs = quiz.phase === "lobby" ? quiz.question_count : quiz.question_count - quiz.current_index - (quiz.phase === "reveal" ? 1 : 0);
+  const secs = Math.max(0, remainingQs) * ((QUESTION_MS + REVEAL_MS) / 1000);
+  const eta = secs >= 60 ? `~${Math.ceil(secs / 60)} min` : `~${Math.ceil(secs)}s`;
+  const done = quiz.phase === "ended";
+
+  return (
+    <div className="w-full rounded-2xl border border-white/10 bg-white/5 p-3">
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs uppercase tracking-wider text-violet-300">{done ? "Ticket queue" : "Your place in the ticket queue"}</span>
+        {moved > 0 && <span className="animate-pop text-xs font-bold text-emerald-300">▲ {moved} places</span>}
+      </div>
+      <div className="mt-1 flex items-baseline justify-between">
+        <span className="font-mono text-3xl font-black tabular-nums">
+          {done ? "You're at the front 🎟️" : `#${pos.toLocaleString("en-GB")}`}
+          {!done && <span className="ml-1 text-sm font-normal text-violet-300">of {QUEUE_SIZE.toLocaleString("en-GB")}</span>}
+        </span>
+        {!done && <span className="text-sm text-violet-200">{eta} to go</span>}
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-emerald-400 transition-[width] duration-700"
+          style={{ width: `${done ? 100 : Math.max(2, 100 - (pos / start) * 100)}%` }}
+        />
+      </div>
+    </div>
   );
 }
 

@@ -1,4 +1,5 @@
 import { bad, getQuiz } from "@/lib/api";
+import { revealIfAllAnswered } from "@/lib/engine";
 import { QUESTION_MS } from "@/lib/game";
 import { serverSupabase } from "@/lib/supabase";
 
@@ -43,5 +44,6 @@ export async function POST(req: Request, ctx: RouteContext<"/api/quizzes/[code]/
       .eq("id", playerId);
   }
 
-  return Response.json({ correct, points, answer_index: q.answer_index });
+  await revealIfAllAnswered(quiz);
+  return Response.json({ correct, points });
 }

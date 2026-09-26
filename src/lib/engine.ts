@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { runBasketAgent, type TagStats } from "@/agents/basket";
 import { log } from "./api";
 import { QUESTION_MS, REVEAL_MS, type Item, type Phase, type Player, type Quiz } from "./game";
@@ -57,10 +58,33 @@ async function roundInsight(quiz: Quiz) {
   if (top) await log(quiz.id, "merch", `Room is strongest on "${top}" so far. Weighting ${top} items up in bundles.`);
 }
 
+/** Lazily move the game on when a deadline has passed. Any client poll drives the clock, so no tab is required. */
+export async function tick(quiz: Quiz) {
+  if ((quiz.phase !== "question" && quiz.phase !== "reveal") || !quiz.phase_ends_at) return false;
+  if (Date.now() < new Date(quiz.phase_ends_at).getTime()) return false;
+  return advance(quiz, { phase: quiz.phase, index: quiz.current_index });
+}
+
+/** Skip straight to the reveal once every player has answered. */
+export async function revealIfAllAnswered(quiz: Quiz) {
+  const db = serverSupabase();
+  const [{ count: players }, { count: answered }] = await Promise.all([
+    db.from("players").select("id", { count: "exact", head: true }).eq("quiz_id", quiz.id),
+    db.from("answers").select("id", { count: "exact", head: true }).eq("quiz_id", quiz.id).eq("question_idx", quiz.current_index),
+  ]);
+  if (players && answered !== null && answered >= players) return advance(quiz, { phase: "question", index: quiz.current_index });
+  return false;
+}
+
 export async function finish(quiz: Quiz) {
   const ok = await transition(quiz, { status: "ended", phase: "ended", phase_ends_at: null });
   if (!ok) return false;
+  // Respond immediately; the Basket agents run after the response is sent.
+  after(() => runBasketAgents(quiz));
+  return true;
+}
 
+async function runBasketAgents(quiz: Quiz) {
   const db = serverSupabase();
   const [{ data: players }, { data: items }, { data: answers }, { data: questions }] = await Promise.all([
     db.from("players").select("*").eq("quiz_id", quiz.id).order("score", { ascending: false }).order("created_at"),
@@ -111,5 +135,4 @@ export async function finish(quiz: Quiz) {
       }),
     );
   }
-  return true;
 }

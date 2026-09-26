@@ -35,10 +35,19 @@ export function useQuizState(code: string) {
   }, [code]);
 
   const quizId = state?.quiz.id;
+  const endsAt = state?.quiz.phase_ends_at;
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Ask the server to move on the moment the current phase's deadline passes.
+  useEffect(() => {
+    if (!endsAt) return;
+    const wait = new Date(endsAt).getTime() - (Date.now() + skew) + 150;
+    const t = setTimeout(refresh, Math.max(0, wait));
+    return () => clearTimeout(t);
+  }, [endsAt, skew, refresh]);
 
   useEffect(() => {
     if (!quizId) return;
@@ -49,7 +58,7 @@ export function useQuizState(code: string) {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "answers", filter: `quiz_id=eq.${quizId}` }, () => refresh())
       .subscribe();
     // Safety net if a realtime event is missed on flaky venue wifi.
-    const poll = setInterval(refresh, 4000);
+    const poll = setInterval(refresh, 3000);
     return () => {
       clearInterval(poll);
       sb.removeChannel(ch);

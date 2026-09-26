@@ -1,5 +1,6 @@
-export const QUESTION_MS = 15_000;
-export const REVEAL_MS = 6_000;
+export const QUESTION_MS = 10_000;
+export const REVEAL_MS = 3_000;
+export const QUEUE_SIZE = 1_000;
 
 export type Phase = "lobby" | "question" | "reveal" | "ended";
 
@@ -66,9 +67,23 @@ export type Player = {
   budget_gbp: number;
 };
 
-/** ~30s per question (15s answer + reveal + breathing room), clamped for sanity. */
+/** One question per answer window + reveal across the wait, clamped for sanity. */
 export function questionCountForWait(waitMinutes: number) {
-  return Math.max(5, Math.min(30, Math.round((waitMinutes * 60) / 30)));
+  return Math.max(5, Math.min(30, Math.round((waitMinutes * 60 * 1000) / (QUESTION_MS + REVEAL_MS))));
+}
+
+/** Fake queue: each fan starts somewhere in a 1,000-person queue and moves forward with every question. */
+export function startPosition(playerId: string) {
+  let h = 0;
+  for (const c of playerId) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return QUEUE_SIZE - 150 + (h % 150);
+}
+
+export function queuePosition(playerId: string, quiz: Pick<Quiz, "phase" | "current_index" | "question_count">) {
+  if (quiz.phase === "ended") return 0;
+  const start = startPosition(playerId);
+  const done = quiz.phase === "lobby" ? 0 : quiz.current_index + (quiz.phase === "reveal" ? 1 : 0);
+  return Math.max(1, Math.round(start * (1 - done / quiz.question_count)));
 }
 
 export function makeCode() {

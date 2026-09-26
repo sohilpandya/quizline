@@ -3,8 +3,8 @@ import { serverSupabase } from "@/lib/supabase";
 
 export async function POST(req: Request, ctx: RouteContext<"/api/quizzes/[code]/join">) {
   const { code } = await ctx.params;
-  const { name, budget } = await req.json().catch(() => ({}));
-  const budgetGbp = Math.max(10, Math.min(500, Math.round(Number(budget) || 60)));
+  const { name } = await req.json().catch(() => ({}));
+  const budgetGbp = 50; // Every fan's agent aims for a £50 basket.
   const clean = String(name ?? "").trim().slice(0, 20);
   if (!clean) return bad("Name is required");
   const quiz = await getQuiz(code);

@@ -51,3 +51,27 @@ export async function grokText(system: string, user: string): Promise<string | n
     return null;
   }
 }
+
+/** Live web research via xAI's server-side web_search tool (Responses API). Returns notes, or null on failure. */
+export async function grokResearch(prompt: string): Promise<string | null> {
+  if (!process.env.XAI_API_KEY) return null;
+  try {
+    const res = await fetch(`${BASE_URL}/responses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.XAI_API_KEY}` },
+      body: JSON.stringify({ model: MODEL, tools: [{ type: "web_search" }], input: prompt }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`Grok research ${res.status}`);
+    const data = await res.json();
+    const text = (data.output ?? [])
+      .filter((o: { type: string }) => o.type === "message")
+      .flatMap((o: { content: { text?: string }[] }) => o.content.map((c) => c.text ?? ""))
+      .join("\n")
+      .trim();
+    return text || null;
+  } catch (e) {
+    console.warn("Grok research failed", e);
+    return null;
+  }
+}

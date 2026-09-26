@@ -47,7 +47,7 @@ export default function Stage() {
     const check = () => {
       const remaining = end - (Date.now() + skew);
       if (remaining <= 0) advance();
-      else if (everyoneAnswered && remaining < QUESTION_MS - 2000) advance();
+      else if (everyoneAnswered && remaining < QUESTION_MS - 500) advance();
     };
     check();
     const t = setInterval(check, 250);

@@ -40,6 +40,7 @@ export async function POST(req: Request) {
   if (gen.source === "fallback") {
     await log(quiz.id, "quiz", `Grok was unavailable, so I loaded the Nova Rae demo quiz instead of ${artist}.`);
   } else {
+    if (gen.researched) await log(quiz.id, "quiz", `Searched the live web for the latest on ${artist} (lineup, releases, tours) before writing questions.`);
     await log(
       quiz.id,
       "quiz",
