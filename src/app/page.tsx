@@ -15,6 +15,7 @@ export default function Home() {
   const router = useRouter();
   const [artist, setArtist] = useState("");
   const [wait, setWait] = useState(10);
+  const [fresh, setFresh] = useState(false);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +29,7 @@ export default function Home() {
       const res = await fetch("/api/quizzes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ artist, waitMinutes: wait }),
+        body: JSON.stringify({ artist, waitMinutes: wait, fresh }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed");
@@ -76,6 +77,10 @@ export default function Home() {
             disabled={loading}
             className="accent-fuchsia-400"
           />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-violet-200/80">
+          <input type="checkbox" checked={fresh} onChange={(e) => setFresh(e.target.checked)} disabled={loading} />
+          Regenerate with fresh research (uses Grok credits; otherwise reuses a cached quiz)
         </label>
         <button
           disabled={loading || !artist.trim()}
