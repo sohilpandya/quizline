@@ -18,14 +18,15 @@ A deployed, public URL by 16:00 on 26 Sep 2026 where a host types any artist (e.
 - [Destination](map.md): live room quiz + personalised mock bundle is the must-land demo; real Shopify, Merch agent approvals and Fan-agent auto-buy are cut.
 - [Quiz sizing](map.md): question count = wait_seconds / 30 (10 min → 20 questions); 15s answer window + 5s reveal; host can end early for the 3-min demo.
 - [Catalog](map.md): Grok generates 40 mock items per quiz (title, category, price £, era/album tags, emoji) stored in Supabase; no real Shopify.
-- [Bundle](map.md): deterministic scoring of player tag-affinity (from correct answers) vs item tags picks 3–4 items; Grok writes the one-paragraph "why this bundle" explanation.
+- [Reward ladder](map.md): accuracy sets the tier in code (≥80% Superfan 30% + free ≤£30; ≥60% Gold 20% + free ≤£15; ≥30% Silver 15%; else Fan 10%); #1 gets +£20 free allowance.
+- [Basket agent](map.md): per fan, grok-4.3 gets per-tag right/wrong, the reward, a budget the fan chose on join (£30/60/100) and the catalog; it proposes a basket, code guardrails validate (budget, free cap, ids); it gets 2 drafts, then the guardrail trims the priciest item. Trace shown on phone + stage log. Replaces the deterministic bundle.
+- [Product framing](map.md): B2B2C: queue platforms embed Quizline as an iframe; `/queue/[code]` is a fictional "tixqueue" waiting room demonstrating it.
 - [Identity](map.md): no auth; player id in localStorage, all writes via server routes with service role, clients read + subscribe with anon key.
 
 ## Not yet specified
 
 - Queue flavour: whether to show a simulated ticket-queue position / fake host page (brief P1 `/host-embed-demo`) — only if build lands early.
-- Agent activity log on the stage screen (observability story for judges).
-- Bundle checkout: a mock "Add bundle to cart" / budget mandate.
+- Merch agent flash drops mid-quiz (merchant side of agent-to-agent commerce): only if time after 15:00.
 
 ## Out of scope
 

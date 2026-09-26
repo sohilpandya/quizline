@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "serve": "NODE_ENV=production next build && NODE_ENV=production next start -H 0.0.0.0 -p 3000"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
