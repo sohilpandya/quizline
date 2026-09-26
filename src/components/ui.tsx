@@ -28,7 +28,7 @@ export function TimerBar({ left, total }: { left: number; total: number }) {
 const AGENT_STYLE = {
   quiz: { label: "Quiz Master", cls: "bg-fuchsia-500/20 text-fuchsia-300" },
   merch: { label: "Merch agent", cls: "bg-amber-500/20 text-amber-300" },
-  fan: { label: "Fan agent", cls: "bg-emerald-500/20 text-emerald-300" },
+  fan: { label: "Basket agent", cls: "bg-emerald-500/20 text-emerald-300" },
 } as const;
 
 export function AgentBadge({ agent }: { agent: keyof typeof AGENT_STYLE }) {

@@ -87,7 +87,7 @@ export default function Stage() {
                   disabled={ending}
                   className="rounded-xl bg-emerald-500 px-4 py-2 font-bold hover:bg-emerald-400 disabled:opacity-60"
                 >
-                  {ending ? "Building bundles…" : "Reach front of queue"}
+                  {ending ? "Agents shopping…" : "Reach front of queue"}
                 </button>
               </>
             )}
@@ -158,7 +158,7 @@ export default function Stage() {
         {quiz.phase === "ended" && (
           <div className="flex flex-1 flex-col gap-6">
             <h1 className="text-5xl font-black">You reached the front of the queue 🎟️</h1>
-            <p className="text-xl text-violet-200">Every fan&apos;s agent just built them a personalised bundle.</p>
+            <p className="text-xl text-violet-200">Every fan&apos;s Basket agent just built them a personalised basket from how they played.</p>
             <div className="grid gap-4 md:grid-cols-3">
               {players.slice(0, 3).map((p, i) => (
                 <div key={p.id} className="animate-pop rounded-3xl border border-white/10 bg-white/5 p-5">
@@ -167,6 +167,13 @@ export default function Stage() {
                   <div className="text-violet-300">{p.score} pts</div>
                   {p.bundle ? (
                     <div className="mt-4 flex flex-col gap-2">
+                      {p.bundle.free_item && (
+                        <div className="flex items-center gap-2 text-sm text-emerald-300">
+                          <span className="text-xl">{p.bundle.free_item.emoji}</span>
+                          <span className="flex-1">{p.bundle.free_item.title}</span>
+                          <span>FREE</span>
+                        </div>
+                      )}
                       {p.bundle.items.map((it) => (
                         <div key={it.id} className="flex items-center gap-2 text-sm">
                           <span className="text-xl">{it.emoji}</span>
@@ -174,7 +181,7 @@ export default function Stage() {
                         </div>
                       ))}
                       <div className="mt-2 text-sm text-emerald-300">
-                        £{p.bundle.total_gbp.toFixed(2)} · {p.bundle.tier} ({p.bundle.discount_pct}% off)
+                        {p.bundle.correct}/{p.bundle.asked} correct · {p.bundle.tier} · £{p.bundle.total_gbp.toFixed(2)} of £{p.bundle.budget_gbp}
                       </div>
                     </div>
                   ) : (

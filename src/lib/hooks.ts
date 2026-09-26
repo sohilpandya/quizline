@@ -65,7 +65,7 @@ export function usePlayers(quizId: string | undefined) {
     if (!quizId) return;
     const { data } = await browserSupabase()
       .from("players")
-      .select("id,name,score,correct,profile,bundle")
+      .select("id,name,score,correct,profile,bundle,budget_gbp")
       .eq("quiz_id", quizId)
       .order("score", { ascending: false })
       .order("created_at");

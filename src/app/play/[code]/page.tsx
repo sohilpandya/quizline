@@ -25,6 +25,7 @@ export default function Play() {
   const [name, setName] = useState("");
   const [joining, setJoining] = useState(false);
   const [claimed, setClaimed] = useState(false);
+  const [budget, setBudget] = useState(60);
   const [choices, setChoices] = useState<Record<number, number>>({});
   const { state, error, skew } = useQuizState(code);
   const quiz = state?.quiz;
@@ -39,7 +40,7 @@ export default function Play() {
     const res = await fetch(`/api/quizzes/${code}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, budget }),
     });
     const data = await res.json();
     setJoining(false);
@@ -81,6 +82,23 @@ export default function Play() {
             maxLength={20}
             className="rounded-2xl border border-white/10 bg-black/30 px-5 py-4 text-center text-2xl outline-none focus:border-fuchsia-400"
           />
+          <div className="flex flex-col gap-2">
+            <span className="text-center text-sm text-violet-200">
+              Your agent will build you a merch basket. Max spend?
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              {[30, 60, 100].map((b) => (
+                <button
+                  type="button"
+                  key={b}
+                  onClick={() => setBudget(b)}
+                  className={`rounded-xl py-3 text-lg font-bold ${budget === b ? "bg-white text-violet-950" : "bg-white/10"}`}
+                >
+                  £{b}
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             disabled={joining || !name.trim()}
             className="rounded-2xl bg-fuchsia-500 py-4 text-xl font-bold disabled:opacity-60"
@@ -128,13 +146,23 @@ export default function Play() {
           {b ? (
             <div className="animate-pop flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-5">
               <div className="flex items-center justify-between">
-                <span className="font-bold">Your Fan agent&apos;s bundle</span>
+                <span className="font-bold">Your agent&apos;s basket</span>
                 <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-300">
                   {b.tier}
                 </span>
               </div>
               <p className="text-sm text-violet-100/90">{b.explanation}</p>
               <ul className="flex flex-col gap-3">
+                {b.free_item && (
+                  <li className="flex items-center gap-3 rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-3">
+                    <span className="text-3xl">{b.free_item.emoji}</span>
+                    <span className="flex-1">
+                      <span className="block font-semibold leading-tight">{b.free_item.title}</span>
+                      <span className="text-xs text-emerald-300">Earned with {b.correct}/{b.asked} correct</span>
+                    </span>
+                    <span className="font-mono text-emerald-300">FREE</span>
+                  </li>
+                )}
                 {b.items.map((it) => (
                   <li key={it.id} className="flex items-center gap-3 rounded-2xl bg-black/20 p-3">
                     <span className="text-3xl">{it.emoji}</span>
@@ -148,7 +176,7 @@ export default function Play() {
               </ul>
               <div className="flex items-end justify-between border-t border-white/10 pt-3">
                 <span className="text-sm text-violet-300">
-                  <s>£{b.subtotal_gbp.toFixed(2)}</s> · {b.discount_pct}% off
+                  <s>£{b.subtotal_gbp.toFixed(2)}</s> · {b.discount_pct}% off · budget £{b.budget_gbp}
                 </span>
                 <span className="text-3xl font-black">£{b.total_gbp.toFixed(2)}</span>
               </div>
@@ -157,11 +185,25 @@ export default function Play() {
                 className="rounded-2xl bg-emerald-500 py-4 text-lg font-bold disabled:opacity-80"
                 disabled={claimed}
               >
-                {claimed ? "✓ Added to your ticket order" : "Claim bundle with my tickets"}
+                {claimed ? "✓ Added to your ticket order" : "Add basket to my ticket order"}
               </button>
+              <details className="rounded-2xl bg-black/20 p-3 text-sm" open>
+                <summary className="cursor-pointer font-semibold text-violet-200">How your agent built this</summary>
+                <ol className="mt-2 flex flex-col gap-1.5">
+                  {b.trace.map((t, i) => (
+                    <li
+                      key={i}
+                      className={t.kind === "guardrail" ? "text-amber-300" : t.kind === "think" ? "text-violet-100/90" : "text-emerald-300"}
+                    >
+                      {t.kind === "guardrail" ? "🛡️ " : t.kind === "think" ? "💭 " : "✓ "}
+                      {t.text}
+                    </li>
+                  ))}
+                </ol>
+              </details>
             </div>
           ) : (
-            <p className="text-center text-violet-200">Your Fan agent is building your bundle…</p>
+            <p className="text-center text-violet-200">Your agent is building your basket…</p>
           )}
         </div>
       </Shell>

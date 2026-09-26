@@ -1,4 +1,4 @@
-import { buildBundle } from "@/agents/fan";
+import { runBasketAgent, type TagStats } from "@/agents/basket";
 import { log } from "./api";
 import { QUESTION_MS, REVEAL_MS, type Item, type Phase, type Player, type Quiz } from "./game";
 import { serverSupabase } from "./supabase";
@@ -62,27 +62,50 @@ export async function finish(quiz: Quiz) {
   if (!ok) return false;
 
   const db = serverSupabase();
-  const [{ data: players }, { data: items }] = await Promise.all([
+  const [{ data: players }, { data: items }, { data: answers }, { data: questions }] = await Promise.all([
     db.from("players").select("*").eq("quiz_id", quiz.id).order("score", { ascending: false }).order("created_at"),
     db.from("items").select("*").eq("quiz_id", quiz.id),
+    db.from("answers").select("player_id,question_idx,correct").eq("quiz_id", quiz.id),
+    db.from("questions").select("idx,tags").eq("quiz_id", quiz.id),
   ]);
   const catalog = (items ?? []) as Item[];
   const ranked = (players ?? []) as Player[];
+  const asked = Math.max(0, quiz.current_index + 1);
 
-  await log(quiz.id, "fan", `Queue reached the front. Building ${ranked.length} personalised bundles from ${catalog.length} items.`);
+  // Per-player, per-tag right/wrong: the signal each Basket agent shops from.
+  const tagsByIdx = new Map((questions ?? []).map((q) => [q.idx as number, q.tags as string[]]));
+  const stats = new Map<string, TagStats>();
+  for (const a of answers ?? []) {
+    const s = stats.get(a.player_id) ?? {};
+    for (const t of tagsByIdx.get(a.question_idx) ?? []) {
+      s[t] ??= { right: 0, wrong: 0 };
+      s[t][a.correct ? "right" : "wrong"]++;
+    }
+    stats.set(a.player_id, s);
+  }
 
-  // Fan agents run in parallel, in small batches to stay polite to the API.
-  for (let i = 0; i < ranked.length; i += 8) {
+  await log(quiz.id, "fan", `Queue reached the front. Launching ${ranked.length} Basket agents over a ${catalog.length}-item catalog.`);
+
+  // One agent per fan, all in parallel (small batches to stay polite to the API).
+  for (let i = 0; i < ranked.length; i += 10) {
     await Promise.all(
-      ranked.slice(i, i + 8).map(async (player, j) => {
+      ranked.slice(i, i + 10).map(async (player, j) => {
         const rank = i + j + 1;
-        const bundle = await buildBundle(quiz.artist, player, rank, catalog);
+        const bundle = await runBasketAgent({
+          artist: quiz.artist,
+          player,
+          rank,
+          asked,
+          tagStats: stats.get(player.id) ?? {},
+          catalog,
+        });
         await db.from("players").update({ bundle }).eq("id", player.id);
-        if (rank <= 3) {
+        if (rank <= 5) {
+          const revisions = bundle.trace.filter((t) => t.kind === "guardrail").length;
           await log(
             quiz.id,
             "fan",
-            `${player.name} (#${rank}): ${bundle.items.map((x) => x.title).join(", ")}, £${bundle.total_gbp.toFixed(2)} after ${bundle.discount_pct}% off.`,
+            `${player.name}'s agent (${bundle.correct}/${asked}, ${bundle.tier}): ${[...bundle.items.map((x) => x.title), ...(bundle.free_item ? [`FREE ${bundle.free_item.title}`] : [])].join(", ")} · £${bundle.total_gbp.toFixed(2)} of £${bundle.budget_gbp}${revisions ? ` · ${revisions} draft${revisions > 1 ? "s" : ""} blocked by guardrails` : ""}.`,
           );
         }
       }),

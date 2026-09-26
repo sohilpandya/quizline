@@ -36,15 +36,24 @@ export type Item = {
   tags: string[];
 };
 
+export type TraceStep = { kind: "think" | "guardrail" | "action"; text: string };
+
 export type Bundle = {
   rank: number;
   tier: string;
   discount_pct: number;
+  free_cap_gbp: number;
+  budget_gbp: number;
+  correct: number;
+  asked: number;
   items: Item[];
+  free_item: Item | null;
   subtotal_gbp: number;
   total_gbp: number;
   explanation: string;
   top_tags: string[];
+  trace: TraceStep[];
+  source: "agent" | "fallback";
 };
 
 export type Player = {
@@ -54,6 +63,7 @@ export type Player = {
   correct: number;
   profile: Record<string, number>;
   bundle: Bundle | null;
+  budget_gbp: number;
 };
 
 /** ~30s per question (15s answer + reveal + breathing room), clamped for sanity. */
@@ -66,9 +76,19 @@ export function makeCode() {
   return Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
 }
 
-export function tierForRank(rank: number): { tier: string; discount_pct: number } {
-  if (rank === 1) return { tier: "Gold · #1 fan", discount_pct: 30 };
-  if (rank <= 3) return { tier: "Silver · top 3", discount_pct: 20 };
-  if (rank <= 10) return { tier: "Bronze · top 10", discount_pct: 15 };
-  return { tier: "Fan", discount_pct: 10 };
+export type Reward = { tier: string; discount_pct: number; free_cap_gbp: number };
+
+/** The quiz earns the reward: accuracy sets the discount and free-item allowance, #1 gets a bonus. */
+export function rewardFor(correct: number, asked: number, rank: number): Reward {
+  const acc = asked > 0 ? correct / asked : 0;
+  let r: Reward =
+    acc >= 0.8
+      ? { tier: "Superfan", discount_pct: 30, free_cap_gbp: 30 }
+      : acc >= 0.6
+        ? { tier: "Gold", discount_pct: 20, free_cap_gbp: 15 }
+        : acc >= 0.3
+          ? { tier: "Silver", discount_pct: 15, free_cap_gbp: 0 }
+          : { tier: "Fan", discount_pct: 10, free_cap_gbp: 0 };
+  if (rank === 1 && correct > 0) r = { ...r, tier: `${r.tier} · #1 in queue`, free_cap_gbp: r.free_cap_gbp + 20 };
+  return r;
 }

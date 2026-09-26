@@ -87,3 +87,6 @@ drop policy if exists "read" on agent_log; create policy "read" on agent_log for
 do $$ begin
   alter publication supabase_realtime add table quizzes, players, answers, agent_log;
 exception when duplicate_object then null; end $$;
+
+-- v2: fan budget for the Basket agent
+alter table players add column if not exists budget_gbp int not null default 60;
