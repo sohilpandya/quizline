@@ -34,7 +34,8 @@ export function pickItems(profile: Record<string, number>, catalog: Item[]): Ite
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function buildBundle(artist: string, player: Player, rank: number, catalog: Item[]): Promise<Bundle> {
-  const { tier, discount_pct } = tierForRank(rank);
+  // Rewards need at least one correct answer; everyone else still gets the fan discount.
+  const { tier, discount_pct } = tierForRank(player.correct > 0 ? rank : Infinity);
   const items = pickItems(player.profile, catalog);
   const subtotal = round2(items.reduce((s, i) => s + Number(i.price_gbp), 0));
   const total = round2(subtotal * (1 - discount_pct / 100));

@@ -7,13 +7,14 @@ const at = (ms: number) => new Date(Date.now() + ms).toISOString();
 
 /** Compare-and-set transition so two stage tabs can't double-advance. Returns false if state moved on. */
 async function transition(quiz: Quiz, patch: Partial<Quiz>) {
-  const { data } = await serverSupabase()
+  const { data, error } = await serverSupabase()
     .from("quizzes")
     .update(patch)
     .eq("id", quiz.id)
     .eq("phase", quiz.phase)
     .eq("current_index", quiz.current_index)
     .select("id");
+  if (error) console.error("transition failed", error);
   return (data?.length ?? 0) > 0;
 }
 

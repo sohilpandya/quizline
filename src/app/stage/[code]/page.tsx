@@ -39,13 +39,21 @@ export default function Stage() {
   }
 
   // The stage drives the clock: advance when time runs out, or early when everyone has answered.
+  // Reads the deadline directly (not the rendered countdown) so a stale 0 never skips a question.
   const everyoneAnswered = quiz?.phase === "question" && players.length > 0 && (state?.answered ?? 0) >= players.length;
   useEffect(() => {
-    if (!quiz || (quiz.phase !== "question" && quiz.phase !== "reveal")) return;
-    if (left <= 0 && quiz.phase_ends_at) advance();
-    else if (everyoneAnswered && left < QUESTION_MS / 1000 - 2) advance();
+    if (!quiz?.phase_ends_at || (quiz.phase !== "question" && quiz.phase !== "reveal")) return;
+    const end = new Date(quiz.phase_ends_at).getTime();
+    const check = () => {
+      const remaining = end - (Date.now() + skew);
+      if (remaining <= 0) advance();
+      else if (everyoneAnswered && remaining < QUESTION_MS - 2000) advance();
+    };
+    check();
+    const t = setInterval(check, 250);
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [left <= 0, everyoneAnswered, quiz?.phase, quiz?.current_index]);
+  }, [quiz?.phase, quiz?.current_index, quiz?.phase_ends_at, everyoneAnswered, skew]);
 
   if (error) return <Center>{error}</Center>;
   if (!state || !quiz) return <Center>Loading…</Center>;

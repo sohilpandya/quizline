@@ -69,7 +69,7 @@ export async function generateQuiz(artist: string, count: number): Promise<Gener
       SYSTEM +
         " You also act as the merchandiser, designing a mock merch catalog. Items are fictional mock products for a demo.",
       `Artist: ${artist}\nDesign 40 mock merch items for the tour store: tees, hoodies, caps, posters, vinyl, tote bags, pins, lanyards, phone cases, bucket hats, etc.\n` +
-        `Each item references a specific era/album/theme and has 1-2 tags chosen ONLY from: ${JSON.stringify(vocab)}. Cover every tag with several items.\n` +
+        `Each item title references this artist's OWN songs, albums, tours or lyrics (never other artists' songs), and a specific era/album/theme and has 1-2 tags chosen ONLY from: ${JSON.stringify(vocab)}. Cover every tag with several items.\n` +
         `Realistic GBP prices (£8-£90). One emoji per item. JSON: {"items":[{"title","category","description","price_gbp","emoji","tags"}]}`,
     ),
   ]);

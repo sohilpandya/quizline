@@ -24,6 +24,7 @@ export default function Play() {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [joining, setJoining] = useState(false);
+  const [claimed, setClaimed] = useState(false);
   const [choices, setChoices] = useState<Record<number, number>>({});
   const { state, error, skew } = useQuizState(code);
   const quiz = state?.quiz;
@@ -151,7 +152,13 @@ export default function Play() {
                 </span>
                 <span className="text-3xl font-black">£{b.total_gbp.toFixed(2)}</span>
               </div>
-              <button className="rounded-2xl bg-emerald-500 py-4 text-lg font-bold">Claim bundle with my tickets</button>
+              <button
+                onClick={() => setClaimed(true)}
+                className="rounded-2xl bg-emerald-500 py-4 text-lg font-bold disabled:opacity-80"
+                disabled={claimed}
+              >
+                {claimed ? "✓ Added to your ticket order" : "Claim bundle with my tickets"}
+              </button>
             </div>
           ) : (
             <p className="text-center text-violet-200">Your Fan agent is building your bundle…</p>
