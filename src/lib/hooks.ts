@@ -7,6 +7,7 @@ export type QuizState = {
   quiz: Quiz;
   progress: Record<string, number>;
   answered: number;
+  tickets: { capacity: number; sold: number };
   now: number;
 };
 

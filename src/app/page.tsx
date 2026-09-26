@@ -14,7 +14,7 @@ const STEPS = [
 export default function Home() {
   const router = useRouter();
   const [artist, setArtist] = useState("");
-  const [wait, setWait] = useState(10);
+  const [wait, setWait] = useState(1);
   const [fresh, setFresh] = useState(false);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
@@ -70,7 +70,7 @@ export default function Home() {
           </span>
           <input
             type="range"
-            min={2}
+            min={1}
             max={30}
             value={wait}
             onChange={(e) => setWait(Number(e.target.value))}

@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { runBasketAgent, type TagStats } from "@/agents/basket";
 import { log } from "./api";
-import type { Bundle, Item, Player, Quiz } from "./game";
+import { ticketCapacity, type Bundle, type Item, type Player, type Quiz } from "./game";
 import { serverSupabase } from "./supabase";
 
 /** Compare-and-set transition so two stage tabs can't double-advance. Returns false if state moved on. */
@@ -77,25 +77,33 @@ async function runBasketAgents(quiz: Quiz, onlyPlayerId?: string) {
     .filter(({ player }) => !player.bundle && (!onlyPlayerId || player.id === onlyPlayerId));
   if (todo.length === 0) return;
 
-  // Claim these fans first so a double trigger can't run two agents for one fan.
-  const pending = { rank: 0, pending: true } as unknown as Bundle;
-  const { data: claimed } = await db
-    .from("players")
-    .update({ bundle: pending })
-    .in("id", todo.map((t) => t.player.id))
-    .is("bundle", null)
-    .select("id");
-  const mine = new Set((claimed ?? []).map((c) => c.id));
-  const work = todo.filter((t) => mine.has(t.player.id));
+  // Tickets: first to the front wins. A fan arriving alone gets one if any are left;
+  // the host fast-forward hands the remainder out by quiz rank.
+  const capacity = ticketCapacity(ranked.length);
+  let left = capacity - ranked.filter((p) => p.bundle?.ticket).length;
+  const tickets = new Map(todo.map((t) => [t.player.id, left-- > 0]));
+
+  // Claim each fan first so a double trigger can't run two agents for one fan.
+  const work: typeof todo = [];
+  for (const t of todo) {
+    const pending = { rank: t.rank, pending: true, ticket: tickets.get(t.player.id) } as unknown as Bundle;
+    const { data } = await db.from("players").update({ bundle: pending }).eq("id", t.player.id).is("bundle", null).select("id");
+    if (data?.length) work.push(t);
+  }
   if (work.length === 0) return;
 
-  await log(
-    quiz.id,
-    "fan",
-    onlyPlayerId
-      ? `${work[0].player.name} reached the front of the queue. Their Basket agent is shopping ${catalog.length} items.`
-      : `Queue reached the front. Launching ${work.length} Basket agents over a ${catalog.length}-item catalog.`,
-  );
+  let sold = ranked.filter((p) => p.bundle?.ticket).length;
+  for (const { player } of work) {
+    const got = tickets.get(player.id);
+    if (got) sold++;
+    await log(
+      quiz.id,
+      "fan",
+      got
+        ? `🎟️ ${player.name} reached the front and got tickets (${Math.min(sold, capacity)}/${capacity} sold). Their Basket agent is shopping.`
+        : `❌ ${player.name} reached the front but tickets are sold out. Their agent is building a merch basket instead.`,
+    );
+  }
 
   // One agent per fan, all in parallel (small batches to stay polite to the API).
   for (let i = 0; i < work.length; i += 10) {
@@ -109,6 +117,7 @@ async function runBasketAgents(quiz: Quiz, onlyPlayerId?: string) {
           asked,
           tagStats: stats.get(player.id) ?? {},
           catalog,
+          ticket: tickets.get(player.id) ?? false,
         });
         await db.from("players").update({ bundle }).eq("id", player.id);
         if (rank <= 5 || onlyPlayerId) {

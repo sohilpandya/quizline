@@ -8,7 +8,7 @@ export const maxDuration = 120;
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const artist = String(body.artist ?? "").trim().slice(0, 60);
-  const waitMinutes = Math.max(2, Math.min(60, Number(body.waitMinutes) || 10));
+  const waitMinutes = Math.max(1, Math.min(60, Number(body.waitMinutes) || 1));
   if (!artist) return bad("Artist is required");
 
   const count = questionCountForWait(waitMinutes);

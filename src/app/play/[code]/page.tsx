@@ -81,7 +81,18 @@ export default function Play() {
 
   const meIndex = players.findIndex((p) => p.id === playerId);
   const me = meIndex >= 0 ? players[meIndex] : null;
-  return <Game code={code} storeKey={key} playerId={playerId} quiz={quiz} rank={meIndex + 1} me={me} fans={players.length} />;
+  return (
+    <Game
+      code={code}
+      storeKey={key}
+      playerId={playerId}
+      quiz={quiz}
+      rank={meIndex + 1}
+      me={me}
+      fans={players.length}
+      ticketsLeft={Math.max(0, state.tickets.capacity - state.tickets.sold)}
+    />
+  );
 }
 
 function Game({
@@ -92,6 +103,7 @@ function Game({
   rank,
   me,
   fans,
+  ticketsLeft,
 }: {
   code: string;
   storeKey: string;
@@ -100,6 +112,7 @@ function Game({
   rank: number;
   me: { name: string; score: number; correct: number; bundle: Bundle | null } | null;
   fans: number;
+  ticketsLeft: number;
 }) {
   const queue = useQueue(storeKey, playerId, quiz);
   const atFront = queue.pos <= 0;
@@ -180,7 +193,7 @@ function Game({
 
   const header = (
     <div className="flex w-full flex-col gap-3">
-      <QueueBar queue={queue} />
+      <QueueBar queue={queue} ticketsLeft={ticketsLeft} />
       <div className="flex w-full items-center justify-between text-sm text-violet-200">
         <span className="font-semibold">{me?.name}</span>
         <span>
@@ -193,16 +206,28 @@ function Game({
 
   if (atFront) {
     const b = me?.bundle && !me.bundle.pending ? me.bundle : null;
+    const decided = me?.bundle ? me.bundle.ticket : null;
     return (
       <Shell>
         {header}
         <div className="flex w-full flex-col gap-4">
-          <div className="text-center">
-            <p className="text-sm uppercase tracking-wider text-emerald-300">It&apos;s your turn to buy tickets</p>
-            <p className="text-violet-200">
-              {tally.correct} correct · quiz rank #{rank || "–"}
-            </p>
-          </div>
+          {decided === null ? (
+            <p className="text-center text-violet-200">Checking ticket availability…</p>
+          ) : decided ? (
+            <div className="animate-pop rounded-3xl bg-emerald-500 p-5 text-center">
+              <div className="text-5xl">🎟️</div>
+              <p className="mt-1 text-2xl font-black">You got tickets!</p>
+              <p className="text-emerald-50">
+                {tally.correct} correct · quiz rank #{rank || "–"}
+              </p>
+            </div>
+          ) : (
+            <div className="animate-pop rounded-3xl bg-rose-500/90 p-5 text-center">
+              <div className="text-5xl">😢</div>
+              <p className="mt-1 text-2xl font-black">Sold out</p>
+              <p className="text-rose-50">So close! Tickets ran out just before you reached the front.</p>
+            </div>
+          )}
           {b ? <BasketCard b={b} /> : <AgentWorking />}
         </div>
       </Shell>
@@ -301,7 +326,8 @@ type Queue = { pos: number; start: number; rate: number; moved: number; surge: b
  */
 function useQueue(storeKey: string, playerId: string, quiz: Quiz): Queue {
   const start = startPosition(playerId);
-  const rate = start / (quiz.wait_minutes * 60); // places per second
+  // Same speed for everyone, so starting further back (or answering less) means arriving later.
+  const rate = QUEUE_SIZE / (quiz.wait_minutes * 60); // places per second
   const k = `${storeKey}:queue`;
   const posRef = useRef<number | null>(null);
   if (posRef.current === null) {
@@ -319,7 +345,7 @@ function useQueue(storeKey: string, playerId: string, quiz: Quiz): Queue {
     (by: number, isSurge = false) => {
       const p = posRef.current ?? start;
       // Before the quiz opens the queue still moves, but never lets you reach the front.
-      const floor = lobby ? Math.min(p, start * 0.25) : 0;
+      const floor = lobby ? Math.min(p, start * 0.6) : 0;
       const n = Math.max(floor, p - by);
       posRef.current = n;
       setPos(n);
@@ -340,11 +366,12 @@ function useQueue(storeKey: string, playerId: string, quiz: Quiz): Queue {
     const t = setInterval(() => {
       const dt = (Date.now() - last) / 1000;
       last = Date.now();
-      if (Math.random() < 0.05) move((posRef.current ?? 0) * (0.03 + Math.random() * 0.05) + 5, true);
-      else move(rate * dt * (0.4 + Math.random() * 1.2));
+      const speed = lobby ? 0.25 : 1;
+      if (Math.random() < 0.05) move(((posRef.current ?? 0) * (0.03 + Math.random() * 0.05) + 5) * speed, true);
+      else move(rate * dt * (0.4 + Math.random() * 1.2) * speed);
     }, 700);
     return () => clearInterval(t);
-  }, [ended, rate, move]);
+  }, [ended, rate, move, lobby]);
 
   const bump = useCallback(
     (correct: boolean) => move(correct ? (posRef.current ?? 0) * 0.03 + 8 : (posRef.current ?? 0) * 0.01 + 3),
@@ -354,7 +381,7 @@ function useQueue(storeKey: string, playerId: string, quiz: Quiz): Queue {
   return { pos: ended ? 0 : Math.round(pos), start, rate, moved, surge, bump };
 }
 
-function QueueBar({ queue }: { queue: Queue }) {
+function QueueBar({ queue, ticketsLeft }: { queue: Queue; ticketsLeft: number }) {
   const { pos, start, rate, moved, surge } = queue;
   const done = pos <= 0;
   const secsLeft = Math.round(pos / Math.max(0.1, rate));
@@ -378,6 +405,11 @@ function QueueBar({ queue }: { queue: Queue }) {
         </span>
         {!done && <span className="text-sm text-violet-200">{eta} to go</span>}
       </div>
+      {!done && (
+        <p className={`mt-1 text-xs font-semibold ${ticketsLeft <= 2 ? "text-rose-300" : "text-amber-300"}`}>
+          {ticketsLeft > 0 ? `Only ${ticketsLeft} ticket${ticketsLeft === 1 ? "" : "s"} left. Answer right to jump ahead!` : "Tickets sold out"}
+        </p>
+      )}
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
         <div
           className="h-full rounded-full bg-emerald-400 transition-[width] duration-700"
@@ -442,7 +474,7 @@ function BasketCard({ b }: { b: Bundle }) {
         disabled={claimed}
         className="rounded-2xl bg-emerald-500 py-4 text-lg font-bold disabled:opacity-80"
       >
-        {claimed ? "✓ Added to your ticket order" : "Add basket to my ticket order"}
+        {claimed ? (b.ticket ? "✓ Added to your ticket order" : "✓ Order placed") : b.ticket ? "Add basket to my ticket order" : "Buy my consolation basket"}
       </button>
       <details className="rounded-2xl bg-black/20 p-3 text-sm" open>
         <summary className="cursor-pointer font-semibold text-violet-200">How your agent built this</summary>

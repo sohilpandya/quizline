@@ -19,7 +19,7 @@ type Proposal = z.infer<typeof ProposalSchema>;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const price = (i: Item) => Number(i.price_gbp);
 
-type Ctx = { artist: string; player: Player; rank: number; asked: number; tagStats: TagStats; catalog: Item[] };
+type Ctx = { artist: string; player: Player; rank: number; asked: number; tagStats: TagStats; catalog: Item[]; ticket: boolean };
 
 /** Deterministic guardrails: the agent proposes, code decides whether the basket is allowed. */
 function check(p: Proposal, ctx: Ctx, discount: number, freeCap: number) {
@@ -63,6 +63,7 @@ export async function runBasketAgent(ctx: Ctx): Promise<Bundle> {
   const system =
     `You are ${player.name}'s personal Basket agent inside Quizline, a trivia game fans play while waiting in a ticket queue for ${ctx.artist}. ` +
     "The fan's quiz answers tell you which eras and themes they love. Build them the merch basket they would actually want: favour tags they answered correctly, avoid tags they got wrong, vary categories, and make good use of their reward. " +
+    "If got_tickets is false, the fan just missed out because tickets sold out: acknowledge it kindly in the message and make the basket a consolation they'll love. " +
     "Hard rules checked by code: the SUM of price_after_discount_gbp over paid items must be <= budget_gbp (add it up carefully); at most one free item and only if its price is within the free allowance; 1-4 paid items; only use ids from the catalog. " +
     'Reply as JSON: {"steps": string[] (2-4 short first-person reasoning steps, e.g. "You nailed every Purpose era question, so…"), "paid_item_ids": string[], "free_item_id": string|null, "message": string (2 warm sentences to the fan, second person, no emoji)}.';
 
@@ -70,6 +71,7 @@ export async function runBasketAgent(ctx: Ctx): Promise<Bundle> {
     artist: ctx.artist,
     fan: player.name,
     rank,
+    got_tickets: ctx.ticket,
     quiz: { correct: player.correct, asked, by_tag: tagStats },
     reward: { tier: reward.tier, discount_pct: reward.discount_pct, free_item_allowance_gbp: reward.free_cap_gbp },
     budget_gbp: player.budget_gbp,
@@ -110,6 +112,7 @@ export async function runBasketAgent(ctx: Ctx): Promise<Bundle> {
         top_tags: topTags(tagStats),
         trace,
         source: "agent",
+        ticket: ctx.ticket,
       };
     }
     trace.push({ kind: "guardrail", text: `Guardrail rejected draft ${attempt}: ${result.violations[0]}` });
@@ -154,6 +157,7 @@ export async function runBasketAgent(ctx: Ctx): Promise<Bundle> {
         top_tags: topTags(tagStats),
         trace,
         source: "agent",
+        ticket: ctx.ticket,
       };
     }
   }
@@ -199,5 +203,6 @@ function fallbackBasket(ctx: Ctx, reward: ReturnType<typeof rewardFor>, trace: T
     top_tags: tags,
     trace,
     source: "fallback",
+    ticket: ctx.ticket,
   };
 }

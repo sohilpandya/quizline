@@ -56,6 +56,7 @@ export type Bundle = {
   trace: TraceStep[];
   source: "agent" | "fallback";
   pending?: boolean;
+  ticket: boolean;
 };
 
 export type Player = {
@@ -77,7 +78,13 @@ export function questionCountForWait(waitMinutes: number) {
 export function startPosition(playerId: string) {
   let h = 0;
   for (const c of playerId) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return QUEUE_SIZE - 150 + (h % 150);
+  return QUEUE_SIZE - 350 + (h % 350);
+}
+
+/** Only about half the room can get tickets: first to the front wins, the rest hit "sold out". */
+export const TICKET_SHARE = 0.5;
+export function ticketCapacity(players: number) {
+  return Math.max(1, Math.ceil(players * TICKET_SHARE));
 }
 
 export function queuePosition(playerId: string, quiz: Pick<Quiz, "phase" | "current_index" | "question_count">) {

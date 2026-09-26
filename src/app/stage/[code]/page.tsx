@@ -91,7 +91,8 @@ export default function Stage() {
             <div className="flex items-baseline justify-between">
               <h2 className="text-4xl font-black">Live in the queue</h2>
               <span className="text-xl text-violet-200">
-                {state.answered} answers · {players.length} fans · {baskets.length} baskets built
+                🎟️ {Math.max(0, state.tickets.capacity - state.tickets.sold)} / {state.tickets.capacity} tickets left ·{" "}
+                {state.answered} answers · {baskets.length} baskets
               </span>
             </div>
             <div className="grid gap-3">
@@ -112,11 +113,13 @@ export default function Stage() {
                     <span className="w-24 text-right font-mono text-xl font-bold tabular-nums">{p.score}</span>
                     <span className="w-44 truncate text-right text-sm">
                       {b ? (
-                        <span className="text-emerald-300">
-                          🛍️ £{b.total_gbp.toFixed(2)} · {b.tier}
+                        <span className={b.ticket ? "text-emerald-300" : "text-rose-300"}>
+                          {b.ticket ? "🎟️" : "❌ sold out"} · 🛍️ £{b.total_gbp.toFixed(2)}
                         </span>
                       ) : p.bundle?.pending ? (
-                        <span className="text-amber-300">Agent shopping…</span>
+                        <span className={p.bundle.ticket ? "text-emerald-300" : "text-rose-300"}>
+                          {p.bundle.ticket ? "🎟️ Got tickets" : "❌ Sold out"} · agent shopping…
+                        </span>
                       ) : (
                         <span className="text-violet-300/60">in queue</span>
                       )}
@@ -137,7 +140,9 @@ export default function Stage() {
                 <div key={p.id} className="animate-pop rounded-3xl border border-white/10 bg-white/5 p-5">
                   <div className="text-4xl">{["🥇", "🥈", "🥉"][i]}</div>
                   <div className="mt-2 text-2xl font-bold">{p.name}</div>
-                  <div className="text-violet-300">{p.score} pts</div>
+                  <div className="text-violet-300">
+                    {p.score} pts · {p.bundle?.ticket ? "🎟️ got tickets" : p.bundle ? "❌ sold out" : ""}
+                  </div>
                   {p.bundle && !p.bundle.pending ? (
                     <div className="mt-4 flex flex-col gap-2">
                       {p.bundle.free_item && (
