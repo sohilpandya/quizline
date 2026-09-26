@@ -1,12 +1,11 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserSupabase } from "./supabase";
-import type { Player, PublicQuestion, Quiz } from "./game";
+import type { Player, Quiz } from "./game";
 
 export type QuizState = {
   quiz: Quiz;
-  question: PublicQuestion | null;
-  distribution: number[] | null;
+  progress: Record<string, number>;
   answered: number;
   now: number;
 };

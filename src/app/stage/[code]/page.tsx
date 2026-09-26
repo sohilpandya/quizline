@@ -1,34 +1,23 @@
 "use client";
 import { useParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
-import { useEffect, useRef, useState } from "react";
-import { AgentBadge, Logo, OPTION_STYLES, TimerBar } from "@/components/ui";
-import { QUESTION_MS, REVEAL_MS } from "@/lib/game";
-import { useAgentLog, useCountdown, usePlayers, useQuizState } from "@/lib/hooks";
+import { useEffect, useState } from "react";
+import { AgentBadge, Logo } from "@/components/ui";
+import { useAgentLog, usePlayers, useQuizState } from "@/lib/hooks";
 
 export default function Stage() {
   const { code } = useParams<{ code: string }>();
-  const { state, error, refresh, skew } = useQuizState(code);
+  const { state, error, refresh } = useQuizState(code);
   const quiz = state?.quiz;
   const players = usePlayers(quiz?.id);
   const log = useAgentLog(quiz?.id);
-  const left = useCountdown(quiz?.phase_ends_at, skew);
   const [joinUrl, setJoinUrl] = useState("");
   const [ending, setEnding] = useState(false);
-  const advancing = useRef("");
 
   useEffect(() => setJoinUrl(`${window.location.origin}/play/${code}`), [code]);
 
   async function advance() {
-    if (!quiz) return;
-    const key = `${quiz.phase}:${quiz.current_index}`;
-    if (advancing.current === key) return;
-    advancing.current = key;
-    await fetch(`/api/quizzes/${code}/advance`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phase: quiz.phase, index: quiz.current_index }),
-    });
+    await fetch(`/api/quizzes/${code}/advance`, { method: "POST" });
     refresh();
   }
 
@@ -38,27 +27,11 @@ export default function Stage() {
     refresh();
   }
 
-  // The stage drives the clock: advance when time runs out, or early when everyone has answered.
-  // Reads the deadline directly (not the rendered countdown) so a stale 0 never skips a question.
-  const everyoneAnswered = quiz?.phase === "question" && players.length > 0 && (state?.answered ?? 0) >= players.length;
-  useEffect(() => {
-    if (!quiz?.phase_ends_at || (quiz.phase !== "question" && quiz.phase !== "reveal")) return;
-    const end = new Date(quiz.phase_ends_at).getTime();
-    const check = () => {
-      const remaining = end - (Date.now() + skew);
-      if (remaining <= 0) advance();
-      else if (everyoneAnswered && remaining < QUESTION_MS - 500) advance();
-    };
-    check();
-    const t = setInterval(check, 250);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quiz?.phase, quiz?.current_index, quiz?.phase_ends_at, everyoneAnswered, skew]);
-
   if (error) return <Center>{error}</Center>;
   if (!state || !quiz) return <Center>Loading…</Center>;
 
-  const q = state.question;
+  const progress = state.progress;
+  const baskets = players.filter((p) => p.bundle && !p.bundle.pending);
 
   return (
     <main className="grid min-h-dvh grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_380px] lg:p-10">
@@ -77,11 +50,8 @@ export default function Stage() {
                 Start quiz
               </button>
             )}
-            {(quiz.phase === "question" || quiz.phase === "reveal") && (
+            {quiz.phase === "question" && (
               <>
-                <button onClick={advance} className="rounded-xl bg-white/10 px-4 py-2 font-semibold hover:bg-white/20">
-                  Skip ›
-                </button>
                 <button
                   onClick={end}
                   disabled={ending}
@@ -116,42 +86,45 @@ export default function Stage() {
           </div>
         )}
 
-        {(quiz.phase === "question" || quiz.phase === "reveal") && q && (
-          <div className="flex flex-1 flex-col gap-6">
-            <div className="flex items-center justify-between text-violet-200">
-              <span className="text-xl">
-                Question {q.idx + 1} / {quiz.question_count}
-                <span className="ml-3 text-sm text-violet-300/70">{q.tags.join(" · ")}</span>
-              </span>
-              <span className="text-xl">
-                {quiz.phase === "question" ? `${state.answered} / ${players.length} answered` : "Answer"}
+        {quiz.phase === "question" && (
+          <div className="flex flex-1 flex-col gap-5">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-4xl font-black">Live in the queue</h2>
+              <span className="text-xl text-violet-200">
+                {state.answered} answers · {players.length} fans · {baskets.length} baskets built
               </span>
             </div>
-            <TimerBar left={left} total={(quiz.phase === "question" ? QUESTION_MS : REVEAL_MS) / 1000} />
-            <h2 key={q.idx} className="animate-pop text-4xl font-bold leading-tight lg:text-5xl">
-              {q.prompt}
-            </h2>
-            <div className="grid grid-cols-2 gap-4">
-              {q.options.map((opt, i) => {
-                const reveal = quiz.phase === "reveal";
-                const correct = reveal && q.answer_index === i;
+            <div className="grid gap-3">
+              {players.slice(0, 10).map((p, i) => {
+                const done = progress[p.id] ?? 0;
+                const pct = (done / quiz.question_count) * 100;
+                const b = p.bundle && !p.bundle.pending ? p.bundle : null;
                 return (
-                  <div
-                    key={i}
-                    className={`flex items-center gap-4 rounded-2xl p-6 text-2xl font-semibold transition ${OPTION_STYLES[i].bg} ${
-                      reveal && !correct ? "opacity-30" : ""
-                    } ${correct ? "ring-4 ring-white" : ""}`}
-                  >
-                    <span className="text-3xl">{OPTION_STYLES[i].shape}</span>
-                    <span className="flex-1">{opt}</span>
-                    {reveal && state.distribution && <span className="font-mono">{state.distribution[i]}</span>}
+                  <div key={p.id} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-3">
+                    <span className="w-8 text-2xl font-black text-violet-300">{i + 1}</span>
+                    <span className="w-40 truncate text-xl font-semibold">{p.name}</span>
+                    <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/10">
+                      <div className="h-full rounded-full bg-fuchsia-400 transition-[width] duration-500" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="w-28 text-right font-mono text-lg tabular-nums">
+                      {p.correct}/{done} ✓
+                    </span>
+                    <span className="w-24 text-right font-mono text-xl font-bold tabular-nums">{p.score}</span>
+                    <span className="w-44 truncate text-right text-sm">
+                      {b ? (
+                        <span className="text-emerald-300">
+                          🛍️ £{b.total_gbp.toFixed(2)} · {b.tier}
+                        </span>
+                      ) : p.bundle?.pending ? (
+                        <span className="text-amber-300">Agent shopping…</span>
+                      ) : (
+                        <span className="text-violet-300/60">in queue</span>
+                      )}
+                    </span>
                   </div>
                 );
               })}
             </div>
-            {quiz.phase === "question" && (
-              <div className="text-center font-mono text-6xl font-black tabular-nums">{Math.ceil(left)}</div>
-            )}
           </div>
         )}
 
@@ -165,7 +138,7 @@ export default function Stage() {
                   <div className="text-4xl">{["🥇", "🥈", "🥉"][i]}</div>
                   <div className="mt-2 text-2xl font-bold">{p.name}</div>
                   <div className="text-violet-300">{p.score} pts</div>
-                  {p.bundle ? (
+                  {p.bundle && !p.bundle.pending ? (
                     <div className="mt-4 flex flex-col gap-2">
                       {p.bundle.free_item && (
                         <div className="flex items-center gap-2 text-sm text-emerald-300">

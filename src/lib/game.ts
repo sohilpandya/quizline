@@ -55,6 +55,7 @@ export type Bundle = {
   top_tags: string[];
   trace: TraceStep[];
   source: "agent" | "fallback";
+  pending?: boolean;
 };
 
 export type Player = {

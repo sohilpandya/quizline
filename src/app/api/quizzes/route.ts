@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   const db = serverSupabase();
 
   if (!body.fresh) {
-    const cached = await fromCache(artist, waitMinutes, count);
+    const cached = await fromCache(artist, waitMinutes);
     if (cached) return Response.json({ code: cached, cached: true });
   }
 
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
 }
 
 /** Reuse the richest earlier Grok-generated quiz for the same subject: no LLM calls, no credits. */
-async function fromCache(artist: string, waitMinutes: number, count: number) {
+async function fromCache(artist: string, waitMinutes: number) {
   const db = serverSupabase();
   const { data: sources } = await db
     .from("quizzes")
@@ -73,7 +73,7 @@ async function fromCache(artist: string, waitMinutes: number, count: number) {
   if (!src) return null;
 
   const [{ data: questions }, { data: items }] = await Promise.all([
-    db.from("questions").select("prompt,options,answer_index,difficulty,tags,idx").eq("quiz_id", src.id).order("idx").limit(count),
+    db.from("questions").select("prompt,options,answer_index,difficulty,tags,idx").eq("quiz_id", src.id).order("idx"),
     db.from("items").select("title,category,description,price_gbp,emoji,tags").eq("quiz_id", src.id),
   ]);
   if (!questions?.length || !items?.length) return null;
